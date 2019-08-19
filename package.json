@@ -1,0 +1,10 @@
+{
+  "name": "cordova-qingda-pwithe-pda",
+  "version": "1.0.0",
+  "description": "",
+  "keywords": [
+    "cordova-android"
+  ],
+  "author": "杨逸",
+  "license": "MIT"
+}
