@@ -31,8 +31,12 @@
         <framework src="io.reactivex.rxjava2:rxjava:2.1.14" />
         <source-file src="src/android/PwithePDA.kt" target-dir="app/src/main/java/qingda/cordova"/>
         <source-file src="src/android/libs/rskapi.jar" target-dir="libs" />
+        <source-file src="src/android/libs/armeabi/libbiofp_e_lapi.so" target-dir="libs/armeabi" />
+        <source-file src="src/android/libs/armeabi/libFingerILA.so" target-dir="libs/armeabi" />
         <source-file src="src/android/libs/armeabi/libRskApi.so" target-dir="libs/armeabi" />
         <source-file src="src/android/libs/armeabi/libWelGfpUtils.so" target-dir="libs/armeabi" />
         <source-file src="src/android/libs/armeabi/libwltdetobmp.so" target-dir="libs/armeabi" />
+        <source-file src="src/android/libs/arm64-v8a/libRskApi.so" target-dir="libs/arm64-v8a" />
+        <source-file src="src/android/libs/armeabi-v7a/libRskApi.so" target-dir="libs/armeabi-v7a" />
     </platform>
 </plugin>
