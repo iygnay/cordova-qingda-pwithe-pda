@@ -4,7 +4,6 @@
     xmlns:android="http://schemas.android.com/apk/res/android">
     <name>QingdaPwithePDA</name>
     <platform name="android">
-        <dependency id="cordova-support-kotlin"/>
         <js-module name="QingdaPwithePDA" src="www/android/pwithe-pda.js">
             <clobbers target="cordova.plugins.qingda.pwithePDA"/>
         </js-module>
