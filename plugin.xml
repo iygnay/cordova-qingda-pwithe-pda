@@ -1,8 +1,12 @@
 <?xml version='1.0' encoding='utf-8'?>
-<plugin id="cordova-qingda-pwithe-pda" version="3.0.0" 
+<plugin id="cordova-qingda-pwithe-pda" version="3.0.3" 
     xmlns="http://apache.org/cordova/ns/plugins/1.0" 
     xmlns:android="http://schemas.android.com/apk/res/android">
     <name>QingdaPwithePDA</name>
+    <engines>
+        <engine name="cordova-android" version=">=4"/>
+        <engine name="cordova-plugman" version=">=5.2.0"/><!-- needed for gradleReference support -->
+    </engines>
     <platform name="android">
         <js-module name="QingdaPwithePDA" src="www/android/pwithe-pda.js">
             <clobbers target="cordova.plugins.qingda.pwithePDA"/>
@@ -18,6 +22,7 @@
         </config-file>
         <framework src="com.android.support:appcompat-v7:26+" />
         <framework src="io.reactivex.rxjava2:rxjava:2.1.14" />
+        <framework src="src/android/pwithe-pda.gradle" custom="true" type="gradleReference"/>
         <source-file src="src/android/PwithePDA.kt" target-dir="app/src/main/java/qingda/cordova"/>
         <source-file src="src/android/libs/printapi.aar" target-dir="libs" />
     </platform>
