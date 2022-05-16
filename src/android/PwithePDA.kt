@@ -2,22 +2,21 @@ package qingda.cordova
 
 import android.graphics.BitmapFactory
 import android.util.Base64
-import com.rsk.api.RskApi
+import android.util.Log
+import com.pwithe.printapi.PrintApi
 import org.apache.cordova.CallbackContext
 import org.apache.cordova.CordovaPlugin
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.*
-
-const val PRINT_LAYOUT_CENTER: Byte = 0x49;
-const val PRINT_LAYOUT_CANCEL: Byte = 0x4b;
-const val PRINT_FONT_24_24: Byte = 0x1;
-const val PRINT_FONT_16_16: Byte = 0x2;
-const val PRINT_FONT_16_32: Byte = 0x3;
-const val PRINT_FONT_20_40: Byte = 0x4;
+import io.reactivex.subjects.AsyncSubject
+import io.reactivex.subjects.PublishSubject
 
 class PwithePDAPlugin : CordovaPlugin() {
     private var zgDeviceInited = false;
+    private var isOldDev = false;
+    private var initPrinterSubject = AsyncSubject.create<Int>()
+    private var completePrintSubject = PublishSubject.create<Int>()
 
     override fun execute(action: String?, args: JSONArray?, callbackContext: CallbackContext?): Boolean {
         if (action == "hello") {
@@ -31,86 +30,67 @@ class PwithePDAPlugin : CordovaPlugin() {
 
     private fun initZGAndPrinter() {
         if (!zgDeviceInited) {
-            var r = RskApi.ZGOpenPower()
-            if (r != 0) {
-                throw Exception("不支持的设备型号, 此模块仅能在警翼设备中使用");
-            }
+            PrintApi.CheckDevcie {
+                this.isOldDev = it
+                Log.i("PrintApi","CheckDevcie isOldDev=" + this.isOldDev)
 
-            // note(杨逸):
-            // 按照文档ZG模块上电后需要等待2秒才能继续.
-            Thread.sleep(2000)
+                PrintApi.InitPrint(cordova.activity) {
+                    // 打印完成逻辑...
+                    Log.i("PrintApi.InitPrint","print completed")
+                    this.completePrintSubject.onNext(1)
+                }
+
+                Log.i("PrintApi","InitPrint")
+                this.initPrinterSubject.onNext(1)
+                this.initPrinterSubject.onComplete()
+            }
 
             // completed
             zgDeviceInited = true;
         }
-
-        // note(杨逸):
-        // 重启打印机, 因为警翼打印机没有提供重置的功能
-        // 但是有发现打印有时会遇到换行异常的问题 (重启设备后恢复)
-        // 所以每次打印之前, 我们主动关闭再重启打印机, 以期获得 "重置" 的效果 (不知道是否真的有效)
-        RskApi.PrintClose()
-        Thread.sleep(300)
-
-        var r = RskApi.PrintOpen()
-        if (r != 0) {
-            throw Exception("打印机上电失败, code=$r");
-        }
-        // note(杨逸):
-        // 虽然文档中没有说明, 但这里我们也稍微暂停一下等待打印机上电完成.
-        Thread.sleep(300)
     }
 
     /**
      * 打印:
      */
     private fun printPage(args: JSONArray, callbackContext: CallbackContext) {
-        cordova.threadPool.run {
-            try {
-                // 初始化
-                initZGAndPrinter()
-
-                // 预备
-                RskApi.PrintSetGray(200.toByte())
-                RskApi.PrintSetColor(0)
-                RskApi.PrintSetSpeed(40)
-
-                val data = args.getJSONObject(0)
-                val elements = data.getJSONArray("elements")
-
-                for (i in 0 until elements.length()) {
-                    val element = elements.getJSONObject(i)
-
-                    when (element.getString("tagName")) {
-                        "text" -> printTextElement(element)
-                        "image" -> printImageElement(element)
+        try {
+            // 初始化
+            initZGAndPrinter()
+            this.initPrinterSubject
+                .subscribe ({
+                    this.completePrintSubject.subscribe {
+                        callbackContext.success("ok")
                     }
-                }
 
-                // 结尾符号
-                RskApi.PrintDotLines(10)
-                RskApi.PrintSetLayout(PRINT_LAYOUT_CENTER)
-                RskApi.PrintChars("****************\n")
-                RskApi.PrintDotLines(10)
-                RskApi.PrintLine()
+                    try {
+                        val data = args.getJSONObject(0)
+                        val elements = data.getJSONArray("elements")
 
-                // return
-                callbackContext.success("ok")
-            } catch (error: Exception) {
-                callbackContext.error(error.message)
-            }
+                        for (i in 0 until elements.length()) {
+                            val element = elements.getJSONObject(i)
+
+                            when (element.getString("tagName")) {
+                                "text" -> printTextElement(element)
+                                "image" -> printImageElement(element)
+                            }
+                        }
+
+                        // 结尾符号
+                        PrintApi.DoPrintMsg("\n\n")
+                        PrintApi.DoSetPrintLayout(1)
+                        PrintApi.DoPrintMsg("_____________________________\n\n\n\n\n");
+                        PrintApi.DoPrintOver()
+                    } catch (error: Exception) {
+                        callbackContext.error(error.message)
+                    }
+
+                }, {
+                    callbackContext.error("打印机初始化失败")
+                })
+        } catch (error: Exception) {
+            callbackContext.error(error.message)
         }
-    }
-
-    /**
-     * 重置文本打印设置.
-     * - 例如: 字体大小和行高等
-     * - 每次打印文本前都调用此方法
-     */
-    private fun resetPrintTextSettings() {
-        RskApi.PrintFontSet(PRINT_FONT_24_24)
-        RskApi.PrintFontMagnify(1)
-        RskApi.PrintSetDotLine(12)
-        RskApi.PrintSetLayout(PRINT_LAYOUT_CANCEL)
     }
 
     /**
@@ -121,25 +101,19 @@ class PwithePDAPlugin : CordovaPlugin() {
         var qrcode = element.getString("qrcode")
         // val width = element.getString("width")
         // val height = element.getInt("height")
+        PrintApi.DoSetPrintLayout(1)
 
         if (qrcode != null && qrcode != "") {
             // 二维码模式
-            Thread.sleep(1000)
-            RskApi.PrintDotLines(1)
-            RskApi.PrintSetLayout(PRINT_LAYOUT_CENTER)
-            RskApi.PrintQRWidth(256)
-            RskApi.PrintQR(qrcode)
-            RskApi.PrintSetLayout(PRINT_LAYOUT_CANCEL)
-            RskApi.PrintDotLines(1)
+            PrintApi.DoPrintSetQrWidth(260)
+            PrintApi.DoPrintQrc(qrcode)
+            PrintApi.DoPrintMsg("\n")
         } else {
             // 图片模式
             val bytes = Base64.decode(base64, Base64.DEFAULT)
             val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-
-            Thread.sleep(1000)
-            RskApi.PrintSetLayout(PRINT_LAYOUT_CENTER)
-            RskApi.PrintBitmap(bitmap)
-            RskApi.PrintSetLayout(PRINT_LAYOUT_CANCEL)
+            PrintApi.DoPrintImg(bitmap)
+            PrintApi.DoPrintMsg("\n")
         }
     }
 
@@ -147,35 +121,43 @@ class PwithePDAPlugin : CordovaPlugin() {
      * 打印文本
      */
     private fun printTextElement(element: JSONObject) {
+        Log.i("PrintApi", "printTextElement")
         val text = element.getString("text")
         val fontSize = element.getString("fontSize")
         val indent = element.getInt("indent")
         val align = element.getString("align");
 
-        resetPrintTextSettings()
+        // 设置对齐
+        // 0 左对齐, 1 居中, 2 右对齐
+        PrintApi.DoSetPrintLayout(when (align) {
+            "center" -> 1
+            "right" -> 2
+            else -> 0
+        })
+
         if (text == "_"  || text == "") {
-            RskApi.PrintDotLines(2)
+            PrintApi.DoPrintMsg("\n")
         } else {
-            RskApi.PrintSetLayout(if (align == "center") PRINT_LAYOUT_CENTER else PRINT_LAYOUT_CANCEL)
             if (fontSize == "large") {
-                RskApi.PrintFontSet(PRINT_FONT_16_16)
-                RskApi.PrintFontMagnify(2)
+                // note(杨逸): 警翼新驱动不支持字体大小
             }
 
             val prefixChars = CharArray(indent)
             Arrays.fill(prefixChars, ' ')
             val prefix = String(prefixChars)
-            RskApi.PrintChars(prefix + text + "\n")
-            RskApi.PrintLine()
+            PrintApi.DoPrintMsg(prefix + text + "\n\n")
         }
     }
 
     private fun hello(callbackContext: CallbackContext) {
-        try {
-            var version = RskApi.GetVersion();
-            callbackContext.success("hello, RskApi version is $version");
-        } catch (error: Exception) {
-            callbackContext.error(error.message);
+        initZGAndPrinter()
+        this.initPrinterSubject.subscribe {
+            try {
+                var version = PrintApi.DoGetPrintVersion()
+                callbackContext.success("hello, DoGetPrintVersion version is $version");
+            } catch (error: Exception) {
+                callbackContext.error(error.message);
+            }
         }
     }
 }
